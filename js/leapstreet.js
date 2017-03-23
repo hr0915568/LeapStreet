@@ -141,6 +141,7 @@ function onFrame(frame)
   			handleHighVelocity(false, velocityX);
   		}
   		
+
   		/*else if (canDragY && velocityY > dragVelocityThreshold){
   			updatePOV(false, -1, velocityY);
   		}
@@ -155,7 +156,7 @@ function onFrame(frame)
 function updatePOV(changeHeading, value){
 	var pov = pano.getPov();
 
-	var property = 'changeHeading' ? 'heading' : 'pitch';
+	var property = changeHeading ? 'heading' : 'pitch';
 
 	pov[property] += value;
 }
