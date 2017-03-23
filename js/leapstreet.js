@@ -1,5 +1,5 @@
+var lastDragXPTO = null;
 var lastDrag = null;
-var lastDragX = null;
 var leapInfo = null;
 var isServerConnected = null;
 var controller = null;
@@ -18,6 +18,13 @@ const throwVelocityThreshold = 1000;
 // should be the same as data-throwable value
 const throwVelocity = 1.5;
 
+const directionEnum = {
+	RIGHT: 1,
+	LEFT: 2,
+	UP: 3,
+	DOWN: 4
+};
+
 init();
 
 function init()
@@ -29,12 +36,14 @@ function init()
 
 function prepareStreetMap()
 {
-	lastDragX = {
+	lastDrag = {
 		right: new Date(),
-		left: new Date()
+		left: new Date(),
+		up: new Date(),
+		down: new Date()
 	};
 
-	lastDrag = {
+	lastDragXPTO = {
 		heading: new Date(),
 		pitch: new Date()
 	};
@@ -129,8 +138,8 @@ function onFrame(frame)
   		//var canDragX = canDoGesture(true);
   		//var canDragY = canDoGesture(false);
 
-		var canRotateCW = canDoGesture(true);
-		var canRotateCCW = canDoGesture(false);
+		var canRotateCW = canDoGesture(directionEnum.RIGHT);
+		var canRotateCCW = canDoGesture(directionEnum.LEFT);
 
 		if (canRotateCW && velocityX > dragVelocityThreshold){
 			updatePOV(true, -1.5);
@@ -141,13 +150,16 @@ function onFrame(frame)
   			handleHighVelocity(false, velocityX);
   		}
   		
+  		//var canRotateUp = canDoGesture(directionEnum.UP);
+  		//var canRotateDown = canDoGesture(directionEnum.DOWN);
 
-  		/*else if (canDragY && velocityY > dragVelocityThreshold){
-  			updatePOV(false, -1, velocityY);
+  		if (velocityY > dragVelocityThreshold){
+  			updatePOV(false, -1);
+  			//handleHighVelocity();
   		}
-  		else if (canDragY && velocityY < -dragVelocityThreshold){
-  			updatePOV(false, 1, velocityY);
-  		}*/
+  		else if (velocityY < -dragVelocityThreshold){
+  			updatePOV(false, 1);
+  		}
 
   		pano.setPov(pov);
   	}
@@ -164,18 +176,21 @@ function updatePOV(changeHeading, value){
 function handleHighVelocity(clockwise, velocity){
 	if (velocity < -throwVelocityThreshold || velocity > throwVelocityThreshold){
 		var property = clockwise ? 'right' : 'left';
-		lastDragX[property] = new Date();
+		lastDrag[property] = new Date();
 	}
 }
 
-function canDoGesture(clockwise)
+function canDoGesture(direction)
 {
-	var now = new Date();
+	var now = new Date(); 
+
 	// if we are trying to move clockwise (right), 
 	// we need to make sure the latest counter-clockwise (left) gesture 
 	// didn't occur while in the timer interval and vice-versa
-	var dragType = clockwise ? lastDragX.left : lastDragX.right;
-	var diff = now.getTime() - dragType.getTime();
+	// same deal with rotating up and down
+	var mirror = mirrorDirection(direction);
+
+	var diff = now.getTime() - mirror.getTime();
 
 	var days = Math.floor(diff / (1000 * 60 * 60 * 24));
 	diff -=  days * (1000 * 60 * 60 * 24);
@@ -194,6 +209,21 @@ function canDoGesture(clockwise)
 	}
 
 	return false;
+}
+
+function mirrorDirection(rotationDirection){
+	switch(rotationDirection){
+		case directionEnum.RIGHT:
+			return lastDrag.left;
+		case directionEnum.LEFT:
+			return lastDrag.right;
+		case directionEnum.UP:
+			return lastDrag.down;
+		case directionEnum.DOWN:
+			return lastDrag.up;
+		default:
+			throw new Error('invalid direction');
+	}
 }
 
 function extendedFingersCount(hand)
