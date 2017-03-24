@@ -1,5 +1,5 @@
-var lastDragXPTO = null;
 var lastDrag = null;
+var changingHeading = null;
 var leapInfo = null;
 var isServerConnected = null;
 var controller = null;
@@ -7,22 +7,28 @@ var options = null;
 var isConnected = null;
 var canDrag = true;
 var	pano = null;
-var	earthPosition = null
 var panoOptions = null;
+// panorama earth position
+const earthPosition = {
+	latitude: 38.897526,
+	longitude: -77.0370613
+}
+// how many degrees the heading should change when moving the right hand
+const headingUpdateAmount = 1.5;
+// how many degrees the pitch should change when moving the left hand
+const pitchUpdateAmount = 1;
 // how long it should wait after a throw before allowing image dragging after a throw
-const throwTimer = 0.1; 
-// the minimum velocity to drag a image
-const dragVelocityThreshold = 200;
-// the minimum velocity to throw
-const throwVelocityThreshold = 1000;
-// should be the same as data-throwable value
-const throwVelocity = 1.5;
+const dragBlockTimer = 0.1; 
+// the minimum hand velocity to drag a image
+const dragVelocityThreshold = 100;
+// the minimum hand velocity to block dragging in one direction
+const dragBlockVelocityThreshold = 800;
 
 const directionEnum = {
-	RIGHT: 1,
-	LEFT: 2,
-	UP: 3,
-	DOWN: 4
+	RIGHT: 'right',
+	LEFT: 'left',
+	UP: 'up',
+	DOWN: 'down'
 };
 
 init();
@@ -43,15 +49,10 @@ function prepareStreetMap()
 		down: new Date()
 	};
 
-	lastDragXPTO = {
-		heading: new Date(),
-		pitch: new Date()
-	};
-
-	earthPosition = new google.maps.LatLng(38.897526, -77.0370613);
+	var mapPosition = new google.maps.LatLng(earthPosition.latitude, earthPosition.longitude);
 
 	panoOptions = {
-		position: earthPosition,
+		position: mapPosition,
 		pov: {
 			heading: 0,
 		    pitch: 0
@@ -116,67 +117,80 @@ function onFrame(frame)
 {
 	//console.log("Frame event for frame " + frame.id);
 
-    if(!isConnected || !frame.valid) return;
+    if(!isConnected || !frame.valid || frame.id === 0) {
+    	return;
+    }
 
   	// Retrieves first hand - no need to get it by ID, since we're not fetching hand based time behaviour
-  	if (frame.hands.length > 0) {
-
-  		hand = frame.hands[0];
-
-  		if (extendedFingersCount(hand) < 4){
-  			//return;
-  		}
-
-  		var velocityX = hand.palmVelocity[0];
-  		var velocityY = hand.palmVelocity[1];
-
-  		// debug
-  		//console.log(velocityY);
-
-  		var pov = pano.getPov();
-
-  		//var canDragX = canDoGesture(true);
-  		//var canDragY = canDoGesture(false);
-
-		var canRotateCW = canDoGesture(directionEnum.RIGHT);
-		var canRotateCCW = canDoGesture(directionEnum.LEFT);
-
-		if (canRotateCW && velocityX > dragVelocityThreshold){
-			updatePOV(true, -1.5);
-			handleHighVelocity(true, velocityX);
-  		}
-  		else if (canRotateCCW && velocityX < -dragVelocityThreshold){
-  			updatePOV(true, 1.5);
-  			handleHighVelocity(false, velocityX);
-  		}
-  		
-  		//var canRotateUp = canDoGesture(directionEnum.UP);
-  		//var canRotateDown = canDoGesture(directionEnum.DOWN);
-
-  		if (velocityY > dragVelocityThreshold){
-  			updatePOV(false, -1);
-  			//handleHighVelocity();
-  		}
-  		else if (velocityY < -dragVelocityThreshold){
-  			updatePOV(false, 1);
-  		}
-
-  		pano.setPov(pov);
+  	if (frame.hands.length === 0) {
+  		return;
   	}
+
+  	var hand = frame.hands[0];
+
+  	if (hand.type === 'right'){
+  		updateHeading(hand);
+  		changingHeading = true;
+  	}
+  	else {
+  		updatePitch(hand);
+  		changingHeading = false;
+  	}
+
+  	// if there is at least another hand
+  	if (frame.hands.length > 1){
+  		var secondHand = frame.hands[1];
+
+  		// make sure we don't repeat the heading control! (e.g., with 2 right hands)
+  		if (!changingHeading && secondHand.type === 'right'){
+  			updateHeading(secondHand);
+  		}
+  		// make sure we don't repeat the pitch control! (e.g., with 2 left hands)
+  		else if (changingHeading && secondHand.type === 'left'){
+  			updatePitch(secondHand);
+  		}
+
+  	}
+
+  	var pov = pano.getPov();
+	pano.setPov(pov);
 }
 
-function updatePOV(changeHeading, value){
-	var pov = pano.getPov();
+function updateHeading(hand){
+	var velocityX = hand.palmVelocity[0];
 
-	var property = changeHeading ? 'heading' : 'pitch';
+	// debug
+	//console.log(velocityX);
 
-	pov[property] += value;
+	var canRotateCW = canDoGesture(directionEnum.RIGHT);
+	var canRotateCCW = canDoGesture(directionEnum.LEFT);
+
+	if (canRotateCW && velocityX > dragVelocityThreshold){
+		updatePOV(true, -1.5);
+		handleHighVelocity(directionEnum.RIGHT, velocityX);
+	}
+	else if (canRotateCCW && velocityX < -dragVelocityThreshold){
+		updatePOV(true, 1.5);
+		handleHighVelocity(directionEnum.LEFT, velocityX);
+	}
 }
 
-function handleHighVelocity(clockwise, velocity){
-	if (velocity < -throwVelocityThreshold || velocity > throwVelocityThreshold){
-		var property = clockwise ? 'right' : 'left';
-		lastDrag[property] = new Date();
+function updatePitch(hand){
+	var velocityY = hand.palmVelocity[1];
+
+	// debug
+	//console.log(velocityY);
+
+	var canRotateUp = canDoGesture(directionEnum.UP);
+	var canRotateDown = canDoGesture(directionEnum.DOWN);
+
+	if (canRotateUp && velocityY > dragVelocityThreshold){
+		updatePOV(false, -1);
+		handleHighVelocity(directionEnum.UP, velocityY);
+	}
+	else if (canRotateDown && velocityY < -dragVelocityThreshold){
+		updatePOV(false, 1);
+		handleHighVelocity(directionEnum.DOWN, velocityY);
 	}
 }
 
@@ -204,11 +218,25 @@ function canDoGesture(direction)
 	var seconds = Math.floor(diff / (1000));
 	diff -= seconds * (1000);
 
-	if (days > 0 || hours > 0 || mins > 0 || seconds > throwTimer) {
+	if (days > 0 || hours > 0 || mins > 0 || seconds > dragBlockTimer) {
 		return true;
 	}
 
 	return false;
+}
+
+function updatePOV(changeHeading, value){
+	var pov = pano.getPov();
+
+	var property = changeHeading ? 'heading' : 'pitch';
+
+	pov[property] += value;
+}
+
+function handleHighVelocity(direction, velocity){
+	if (velocity < -dragBlockVelocityThreshold || velocity > dragBlockVelocityThreshold){
+		lastDrag[direction] = new Date();
+	}
 }
 
 function mirrorDirection(rotationDirection){
