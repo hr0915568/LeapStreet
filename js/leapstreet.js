@@ -22,6 +22,7 @@ const dragBlockTimer = 0.1;
 // the minimum hand velocity to drag a image
 const dragVelocityThreshold = 100;
 // the minimum hand velocity to block dragging in one direction
+// required to prevent inadvertent dragging as the hand returns to a particular position
 const dragBlockVelocityThreshold = 800;
 
 const directionEnum = {
