@@ -10,8 +10,8 @@ var	pano = null;
 var panoOptions = null;
 // panorama earth position
 const earthPosition = {
-	latitude: 38.897526,
-	longitude: -77.0370613
+	latitude: 51.8921804,
+	longitude: 4.4180853
 }
 // how many degrees the heading should change when moving the right hand
 const headingUpdateAmount = 1.5;
@@ -61,6 +61,35 @@ function prepareStreetMap()
 	};
 
 	pano = new google.maps.StreetViewPanorama(document.getElementById('panorama'), panoOptions);
+}
+
+function move() {
+  var curr;
+  for(i=0; i < pano.links.length; i++) {
+    var differ = difference(pano.links[i]);
+    if(curr == undefined) {
+      curr = pano.links[i];
+    }
+
+    if(difference(curr) > difference(pano.links[i])) {
+      curr = curr = pano.links[i];
+    }
+  }
+  pano.setPano(curr.pano);
+}
+
+function difference(link) {
+  return Math.abs(pano.pov.heading%360 - link.heading);
+}
+
+function difference2(link) {
+
+    var diff = Math.abs(pano.pov.heading % 360 - link.heading);
+    if(diff>180)
+       diff=Math.abs(360-diff);
+
+    return diff;
+
 }
 
 function prepareLeapMotion()
@@ -134,7 +163,7 @@ function onFrame(frame)
   		changingHeading = true;
   	}
   	else {
-  		updatePitch(hand);
+  		moveForward(hand);
   		changingHeading = false;
   	}
 
@@ -148,7 +177,7 @@ function onFrame(frame)
   		}
   		// make sure we don't repeat the pitch control! (e.g., with 2 left hands)
   		else if (changingHeading && secondHand.type === 'left'){
-  			updatePitch(secondHand);
+  			moveForward(secondHand);
   		}
 
   	}
@@ -159,40 +188,42 @@ function onFrame(frame)
 
 function updateHeading(hand){
 	var velocityX = hand.palmVelocity[0];
-
+	var velocityY = hand.palmVelocity[1];
+	console.log(velocityY);
 	// debug
 	//console.log(velocityX);
-
+	//console.log(velocityX);
+	//console.log(dragVelocityThreshold);
 	var canRotateCW = canDoGesture(directionEnum.RIGHT);
 	var canRotateCCW = canDoGesture(directionEnum.LEFT);
 
 	if (canRotateCW && velocityX > dragVelocityThreshold){
 		updatePOV(true, -1.5);
 		handleHighVelocity(directionEnum.RIGHT, velocityX);
+		
 	}
 	else if (canRotateCCW && velocityX < -dragVelocityThreshold){
 		updatePOV(true, 1.5);
 		handleHighVelocity(directionEnum.LEFT, velocityX);
+		
+	}else if( velocityY < 0 && velocityY > -50){
+		
 	}
 }
 
-function updatePitch(hand){
-	var velocityY = hand.palmVelocity[1];
+function moveForward(hand){
+	var velocityZ = hand.palmVelocity[1];
 
 	// debug
 	//console.log(velocityY);
-
-	var canRotateUp = canDoGesture(directionEnum.UP);
-	var canRotateDown = canDoGesture(directionEnum.DOWN);
-
-	if (canRotateUp && velocityY > dragVelocityThreshold){
-		updatePOV(false, -1);
-		handleHighVelocity(directionEnum.UP, velocityY);
+	console.log(velocityZ);
+	//drive
+	if(velocityZ < 0 && velocityZ > -10){
+		console.log("drive");
+		setTimeout(move(), 3000);
+		
 	}
-	else if (canRotateDown && velocityY < -dragVelocityThreshold){
-		updatePOV(false, 1);
-		handleHighVelocity(directionEnum.DOWN, velocityY);
-	}
+		
 }
 
 function canDoGesture(direction)
